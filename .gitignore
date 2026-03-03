@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# Environment & Secrets
+.env
+
+# Database (jangan di-commit, data ada di Neon)
+*.db
+*.sqlite
+
+# Temporary files
+*.log
+/tmp/
+
+# Tools
+.neon/
+node_modules/

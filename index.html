@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Himpun Data MMS - Puskesmas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            min-height: 100vh;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+        }
+
+        .input-focus {
+            transition: all 0.3s ease;
+        }
+
+        .input-focus:focus {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+        }
+
+        .batch-row {
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body class="flex items-center justify-center p-4 py-12">
+    <div class="glass w-full max-w-2xl rounded-3xl p-8 md:p-10">
+        <div class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-gray-800">📦 Ketersediaan MMS</h1>
+            <p class="text-gray-500 mt-2">Himpun data stok suplemen rutin Puskesmas</p>
+        </div>
+
+        <form id="mmsForm" class="space-y-6">
+            <!-- Data Pelapor -->
+            <div class="space-y-4">
+                <h2 class="text-lg font-semibold text-indigo-600 flex items-center gap-2">
+                    👤 Data Pelapor
+                </h2>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap Pelapor</label>
+                    <input type="text" name="reporter_name" placeholder="Masukkan nama Anda..."
+                        class="w-full p-3 rounded-xl border border-gray-200 glass input-focus outline-none" required>
+                </div>
+            </div>
+
+            <!-- Alamat Section -->
+            <div class="space-y-4 pt-4 border-t border-gray-100">
+                <h2 class="text-lg font-semibold text-blue-600 flex items-center gap-2">
+                    📍 Lokasi Puskesmas
+                </h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Provinsi</label>
+                        <select id="provinsi"
+                            class="w-full p-3 rounded-xl border border-gray-200 glass input-focus outline-none"
+                            required>
+                            <option value="">Pilih Provinsi...</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Kabupaten/Kota</label>
+                        <select id="kabupaten"
+                            class="w-full p-3 rounded-xl border border-gray-200 glass input-focus outline-none" disabled
+                            required>
+                            <option value="">Pilih Kabupaten...</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Kecamatan</label>
+                        <select id="kecamatan"
+                            class="w-full p-3 rounded-xl border border-gray-200 glass input-focus outline-none" disabled
+                            required>
+                            <option value="">Pilih Kecamatan...</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Puskesmas</label>
+                        <input type="text" id="puskesmas" name="puskesmas" placeholder="Pilih Kecamatan dulu..."
+                            class="w-full p-3 rounded-xl border border-gray-200 glass input-focus outline-none" disabled
+                            required>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stok Section -->
+            <div class="space-y-4 pt-4 border-t border-gray-100">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-green-600 flex items-center gap-2">
+                        💊 Batch Suplemen (ED & Stok)
+                    </h2>
+                    <button type="button" id="addBatch"
+                        class="text-sm bg-green-50 text-green-600 px-3 py-1 rounded-lg border border-green-200 hover:bg-green-100 transition-colors">
+                        + Tambah Batch
+                    </button>
+                </div>
+
+                <div id="batchContainer" class="space-y-4">
+                    <!-- Batch rows will be injected here -->
+                </div>
+
+                <div class="bg-blue-50 p-4 rounded-2xl flex justify-between items-center border border-blue-100 mt-4">
+                    <span class="text-blue-700 font-medium">Total Akumulasi:</span>
+                    <div class="text-right">
+                        <span id="totalBotol" class="text-xl font-bold text-blue-800">0</span> <span
+                            class="text-sm text-blue-600">Botol</span>
+                        <span class="mx-2 text-blue-300">|</span>
+                        <span id="totalTab" class="text-xl font-bold text-blue-800">0</span> <span
+                            class="text-sm text-blue-600">Tablet</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hidden fields -->
+            <input type="hidden" id="kabupaten_name" name="kabupaten">
+            <input type="hidden" id="kecamatan_name" name="kecamatan">
+
+            <button type="submit" id="submitBtn"
+                class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg hover:shadow-indigo-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed">
+                Simpan Laporan
+            </button>
+        </form>
+
+        <div id="status" class="mt-4 text-center hidden">
+            <div class="p-3 rounded-xl flex items-center justify-center gap-2">
+                <span id="statusMsg"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "/api";
+        const provinciaSelect = document.getElementById('provinsi');
+        const kabupatenSelect = document.getElementById('kabupaten');
+        const kecamatanSelect = document.getElementById('kecamatan');
+        const puskesmasSelect = document.getElementById('puskesmas');
+        const batchContainer = document.getElementById('batchContainer');
+        const totalBotolDisplay = document.getElementById('totalBotol');
+        const totalTabDisplay = document.getElementById('totalTab');
+        const form = document.getElementById('mmsForm');
+
+        let batchCount = 0;
+
+        // Initialize with one batch
+        addBatchRow();
+
+        function addBatchRow() {
+            batchCount++;
+            const row = document.createElement('div');
+            row.className = 'batch-row grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-white/50 rounded-2xl border border-gray-100 relative';
+            row.id = `batch-${batchCount}`;
+            row.innerHTML = `
+                <div class="col-span-1">
+                    <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1">Jumlah Botol</label>
+                    <input type="number" class="jumlah_botol w-full p-2 rounded-lg border border-gray-100 outline-none focus:border-green-300" placeholder="0" min="0" required>
+                </div>
+                <div class="col-span-1">
+                    <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1">Total Tablet</label>
+                    <input type="number" class="jumlah_tab w-full p-2 rounded-lg bg-gray-50 text-gray-400 font-bold border border-gray-100 outline-none" value="0" readonly>
+                </div>
+                <div class="col-span-1 relative">
+                    <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1">Tgl Kadaluarsa</label>
+                    <input type="date" class="tgl_kadaluarsa w-full p-2 rounded-lg border border-gray-100 outline-none focus:border-green-300" required min="${new Date().toISOString().split('T')[0]}">
+                    ${batchCount > 1 ? `
+                        <button type="button" onclick="removeBatchRow(${batchCount})" class="absolute -top-1 -right-1 bg-red-100 text-red-500 w-5 h-5 rounded-full flex items-center justify-center text-xs hover:bg-red-200">×</button>
+                    ` : ''}
+                </div>
+            `;
+            batchContainer.appendChild(row);
+
+            // Add listeners to new inputs
+            const botolInput = row.querySelector('.jumlah_botol');
+            const tabInput = row.querySelector('.jumlah_tab');
+            botolInput.addEventListener('input', () => {
+                tabInput.value = (parseInt(botolInput.value) || 0) * 180;
+                updateTotals();
+            });
+        }
+
+        function removeBatchRow(id) {
+            const row = document.getElementById(`batch-${id}`);
+            if (row) {
+                row.remove();
+                updateTotals();
+            }
+        }
+
+        function updateTotals() {
+            let totalBotol = 0;
+            let totalTab = 0;
+            document.querySelectorAll('.jumlah_botol').forEach(input => {
+                totalBotol += parseInt(input.value) || 0;
+            });
+            totalBotolDisplay.textContent = totalBotol;
+            totalTabDisplay.textContent = totalBotol * 180;
+        }
+
+        document.getElementById('addBatch').addEventListener('click', addBatchRow);
+
+        // API Cascading Logic
+        fetch(`${API_BASE}/provinces`)
+            .then(res => res.json())
+            .then(data => {
+                data.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    provinciaSelect.appendChild(opt);
+                });
+            });
+
+        provinciaSelect.addEventListener('change', (e) => {
+            const pid = e.target.value;
+            resetSelects([kabupatenSelect, kecamatanSelect]);
+            resetManualInput(puskesmasSelect, "Pilih Provinsi dulu...");
+            if (!pid) return;
+
+            kabupatenSelect.innerHTML = '<option value="">Memuat...</option>';
+            fetch(`${API_BASE}/regencies/${pid}`)
+                .then(res => res.json())
+                .then(data => {
+                    kabupatenSelect.disabled = false;
+                    kabupatenSelect.innerHTML = '<option value="">Pilih Kabupaten...</option>';
+                    data.forEach(r => {
+                        const opt = document.createElement('option');
+                        opt.value = r.id;
+                        opt.textContent = r.name;
+                        kabupatenSelect.appendChild(opt);
+                    });
+                })
+                .catch(() => {
+                    kabupatenSelect.innerHTML = '<option value="">Gagal memuat data</option>';
+                });
+        });
+
+        kabupatenSelect.addEventListener('change', (e) => {
+            const rid = e.target.value;
+            document.getElementById('kabupaten_name').value = e.target.options[e.target.selectedIndex].text;
+            resetSelects([kecamatanSelect]);
+            resetManualInput(puskesmasSelect, "Pilih Kabupaten dulu...");
+            if (!rid) return;
+
+            kecamatanSelect.innerHTML = '<option value="">Memuat...</option>';
+            fetch(`${API_BASE}/districts/${rid}`)
+                .then(res => res.json())
+                .then(data => {
+                    kecamatanSelect.disabled = false;
+                    kecamatanSelect.innerHTML = '<option value="">Pilih Kecamatan...</option>';
+                    data.forEach(d => {
+                        const opt = document.createElement('option');
+                        opt.value = d.id;
+                        opt.textContent = d.name;
+                        kecamatanSelect.appendChild(opt);
+                    });
+                })
+                .catch(() => {
+                    kecamatanSelect.innerHTML = '<option value="">Gagal memuat data</option>';
+                });
+        });
+
+        kecamatanSelect.addEventListener('change', (e) => {
+            const did = e.target.value;
+            const dname = e.target.options[e.target.selectedIndex].text;
+            document.getElementById('kecamatan_name').value = dname;
+
+            if (!did) {
+                resetManualInput(puskesmasSelect, "Pilih Kecamatan dulu...");
+                return;
+            }
+
+            // Enable manual input instead of fetching
+            puskesmasSelect.disabled = false;
+            puskesmasSelect.placeholder = "Ketik nama Puskesmas...";
+            puskesmasSelect.value = "";
+        });
+
+        function resetManualInput(input, placeholder) {
+            input.value = "";
+            input.placeholder = placeholder;
+            input.disabled = true;
+        }
+
+        function resetSelects(selects) {
+            selects.forEach(s => {
+                s.innerHTML = `<option value="">Pilih ${s.id.charAt(0).toUpperCase() + s.id.slice(1)}...</option>`;
+                s.disabled = true;
+            });
+        }
+
+        // Final Submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Menyimpan...';
+
+            const formData = new FormData(form);
+
+            // Trim puskesmas
+            const puskesmasVal = document.getElementById('puskesmas').value.trim();
+            formData.set('puskesmas', puskesmasVal);
+
+            // Collect batch data
+            const batches = [];
+            document.querySelectorAll('.batch-row').forEach(row => {
+                batches.push({
+                    jumlah_botol: parseInt(row.querySelector('.jumlah_botol').value) || 0,
+                    jumlah_tab: parseInt(row.querySelector('.jumlah_tab').value) || 0,
+                    tgl_kadaluarsa: row.querySelector('.tgl_kadaluarsa').value
+                });
+            });
+            formData.append('batches_json', JSON.stringify(batches));
+
+            const statusDiv = document.getElementById('status');
+            const statusMsg = document.getElementById('statusMsg');
+            statusDiv.classList.remove('hidden');
+            statusMsg.textContent = "Mengirim laporan...";
+
+            try {
+                const res = await fetch('/submit', { method: 'POST', body: formData });
+                const result = await res.json();
+                if (result.status === 'success') {
+                    statusDiv.innerHTML = `<div class="bg-indigo-100 text-indigo-700 p-4 rounded-xl font-bold">✅ Laporan Berhasil Dikirim!</div>`;
+                    form.reset();
+                    batchContainer.innerHTML = '';
+                    addBatchRow();
+                    updateTotals();
+                    resetSelects([kabupatenSelect, kecamatanSelect]);
+                    resetManualInput(puskesmasSelect, 'Pilih Provinsi dulu...');
+                } else {
+                    statusDiv.innerHTML = `<div class="bg-red-100 text-red-700 p-4 rounded-xl">❌ Gagal: ${result.message}</div>`;
+                }
+            } catch (err) {
+                statusDiv.innerHTML = `<div class="bg-red-100 text-red-700 p-4 rounded-xl">❌ Kesalahan Koneksi</div>`;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Simpan Laporan';
+            }
+        });
+    </script>
+</body>
+
+</html>
