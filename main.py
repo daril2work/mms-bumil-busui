@@ -451,6 +451,105 @@ async def get_dashboard_summary():
         "submissions": submissions
     }
 
+@app.get("/api/dashboard-stats")
+async def get_dashboard_stats():
+    # Helper to handle date difference in SQL across both DBs
+    is_pg = USE_POSTGRES
+    
+    with get_db_conn() as conn:
+        cursor = conn.cursor()
+        
+        # 1. Basic sums
+        cursor.execute("SELECT SUM(jumlah_botol), SUM(jumlah_tab) FROM mms_batches")
+        row_sums = cursor.fetchone()
+        
+        # 2. Total active regions
+        cursor.execute("SELECT COUNT(DISTINCT kabupaten) FROM mms_records")
+        active_kab = cursor.fetchone()[0] or 0
+        
+        # 3. Expiration stats (6 months = 180 days approx)
+        if is_pg:
+            # PostgreSQL
+            cursor.execute("SELECT COUNT(*) FROM mms_batches WHERE tgl_kadaluarsa < current_date")
+            expired = cursor.fetchone()[0] or 0
+            cursor.execute("SELECT COUNT(*) FROM mms_batches WHERE tgl_kadaluarsa BETWEEN current_date AND (current_date + interval '6 months')")
+            near_expired = cursor.fetchone()[0] or 0
+        else:
+            # SQLite
+            cursor.execute("SELECT COUNT(*) FROM mms_batches WHERE tgl_kadaluarsa < date('now')")
+            expired = cursor.fetchone()[0] or 0
+            cursor.execute("SELECT COUNT(*) FROM mms_batches WHERE tgl_kadaluarsa BETWEEN date('now') AND date('now', '+6 months')")
+            near_expired = cursor.fetchone()[0] or 0
+            
+        # 4. Reporting activity per kabupaten (for charts)
+        cursor.execute("SELECT kabupaten, COUNT(*) as count FROM mms_records GROUP BY kabupaten ORDER BY count DESC")
+        activity = [{"label": r[0], "value": r[1]} for r in cursor.fetchall()]
+
+    return {
+        "total_botol": row_sums[0] or 0,
+        "total_tablet": row_sums[1] or 0,
+        "active_kabupaten": active_kab,
+        "expired": expired,
+        "near_expired": near_expired,
+        "activity_chart": activity
+    }
+
+@app.get("/api/inventory-list")
+async def get_inventory_list(kabupaten: str = None):
+    with get_db_conn() as conn:
+        cursor = conn.cursor()
+        
+        query = """
+            SELECT 
+                b.id, r.reporter_name, r.kabupaten, r.puskesmas, r.tipe_pelapor,
+                b.jumlah_botol, b.jumlah_tab, b.tgl_kadaluarsa
+            FROM mms_batches b
+            JOIN mms_records r ON b.submission_id = r.id
+        """
+        params = []
+        if kabupaten:
+            query += " WHERE r.kabupaten = %s" if USE_POSTGRES else " WHERE r.kabupaten = ?"
+            params.append(kabupaten)
+            
+        query += " ORDER BY b.tgl_kadaluarsa ASC"
+        
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+        
+        from datetime import date
+        today = date.today()
+        
+        inventory = []
+        for r in rows:
+            # r[7] is date string or object
+            ed_str = str(r[7])
+            try:
+                ed_dt = date.fromisoformat(ed_str)
+                days_diff = (ed_dt - today).days
+                
+                if days_diff < 0:
+                    status = "EXP"
+                elif days_diff < 180:
+                    status = "ALERT"
+                else:
+                    status = "SAFE"
+            except:
+                status = "UNKNOWN"
+                
+            inventory.append({
+                "id": r[0],
+                "reporter": r[1],
+                "kabupaten": r[2],
+                "puskesmas": r[3],
+                "tipe": r[4],
+                "botol": r[5],
+                "tablet": r[6],
+                "ed": ed_str,
+                "status": status
+            })
+            
+    return inventory
+
 @app.post("/submit")
 async def submit_form(
     tipe_pelapor: str = Form("puskesmas"),
