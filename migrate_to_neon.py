@@ -58,7 +58,6 @@ print("📐 Membuat tabel di PostgreSQL (jika belum ada)...")
 pg_cur.execute('''
     CREATE TABLE IF NOT EXISTS mms_records (
         id SERIAL PRIMARY KEY,
-        tipe_pelapor TEXT DEFAULT 'puskesmas',
         reporter_name TEXT,
         kabupaten TEXT,
         kecamatan TEXT,
@@ -66,11 +65,6 @@ pg_cur.execute('''
         created_at TIMESTAMPTZ DEFAULT now()
     )
 ''')
-# Ensure column exists for migration safety
-pg_cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='mms_records' AND column_name='tipe_pelapor'")
-if not pg_cur.fetchone():
-    pg_cur.execute("ALTER TABLE mms_records ADD COLUMN tipe_pelapor TEXT DEFAULT 'puskesmas'")
-
 pg_cur.execute('''
     CREATE TABLE IF NOT EXISTS mms_batches (
         id SERIAL PRIMARY KEY,
@@ -89,33 +83,17 @@ print("✅ Tabel siap.\n")
 # ================================
 # MIGRATE mms_records
 # ================================
-# Check if SQLite has tipe_pelapor
-sq_cur.execute("PRAGMA table_info(mms_records)")
-sq_cols = [c[1] for c in sq_cur.fetchall()]
-has_tipe = 'tipe_pelapor' in sq_cols
-
-if has_tipe:
-    sq_cur.execute("SELECT id, reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor FROM mms_records ORDER BY id")
-else:
-    sq_cur.execute("SELECT id, reporter_name, kabupaten, kecamatan, puskesmas, created_at FROM mms_records ORDER BY id")
-
+sq_cur.execute("SELECT id, reporter_name, kabupaten, kecamatan, puskesmas, created_at FROM mms_records ORDER BY id")
 records = sq_cur.fetchall()
 print(f"📦 Memigrasikan {len(records)} baris dari mms_records...")
 
 id_map = {}  # old SQLite id → new PostgreSQL id
 for row in records:
-    if has_tipe:
-        old_id, reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor = row
-        pg_cur.execute(
-            "INSERT INTO mms_records (reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-            (reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor)
-        )
-    else:
-        old_id, reporter_name, kabupaten, kecamatan, puskesmas, created_at = row
-        pg_cur.execute(
-            "INSERT INTO mms_records (reporter_name, kabupaten, kecamatan, puskesmas, created_at) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-            (reporter_name, kabupaten, kecamatan, puskesmas, created_at)
-        )
+    old_id, reporter_name, kabupaten, kecamatan, puskesmas, created_at = row
+    pg_cur.execute(
+        "INSERT INTO mms_records (reporter_name, kabupaten, kecamatan, puskesmas, created_at) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+        (reporter_name, kabupaten, kecamatan, puskesmas, created_at)
+    )
     new_id = pg_cur.fetchone()[0]
     id_map[old_id] = new_id
 

@@ -23,25 +23,9 @@
         }
 
         .tab-btn-active {
-            background-color: white;
+            border-bottom-color: #4f46e5;
             color: #4f46e5;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             font-weight: 700;
-        }
-
-        .status-badge-exp {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .status-badge-alert {
-            background: #fef3c7;
-            color: #92400e;
-        }
-
-        .status-badge-safe {
-            background: #dcfce7;
-            color: #166534;
         }
 
         @media print {
@@ -98,6 +82,10 @@
                 <p class="text-gray-500">MMS Distribution & Logistics Monitoring</p>
             </div>
             <div class="flex gap-2">
+                <a href="/api/export-excel"
+                    class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-xl transition-all shadow-lg flex items-center gap-2">
+                    📥 Download Excel
+                </a>
                 <button onclick="window.print()"
                     class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-xl transition-all shadow-lg flex items-center gap-2">
                     🖨️ Cetak
@@ -109,128 +97,52 @@
             </div>
         </div>
 
-        <!-- Tabs & Global Filter -->
-        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 no-print">
-            <div class="flex p-1 bg-gray-200/50 rounded-2xl w-full md:w-auto">
-                <button onclick="showTab('ringkasan')" id="btn-ringkasan"
-                    class="flex-1 md:flex-none px-6 py-2 rounded-xl text-sm font-semibold text-gray-500 transition-all">
-                    📊 Ringkasan
-                </button>
-                <button onclick="showTab('logistik')" id="btn-logistik"
-                    class="flex-1 md:flex-none px-6 py-2 rounded-xl text-sm font-semibold text-gray-500 transition-all">
-                    📦 Logistik
-                </button>
-                <button onclick="showTab('riwayat')" id="btn-riwayat"
-                    class="flex-1 md:flex-none px-6 py-2 rounded-xl text-sm font-semibold text-gray-500 transition-all">
-                    🕒 Riwayat
-                </button>
-            </div>
-
-            <div class="flex gap-2 w-full md:w-auto">
-                <select id="filterKabupaten" onchange="fetchInventory()"
-                    class="flex-1 md:flex-none bg-white border border-gray-200 text-sm p-2 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="">Semua Kabupaten</option>
-                </select>
-            </div>
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-200 mb-8 no-print">
+            <button onclick="showTab('statistik')" id="btn-statistik"
+                class="px-6 py-3 font-semibold text-gray-500 hover:text-indigo-600 transition-all border-b-2 border-transparent">
+                Statistik Lokasi
+            </button>
+            <button onclick="showTab('logistik')" id="btn-logistik"
+                class="px-6 py-3 font-semibold text-gray-500 hover:text-indigo-600 transition-all border-b-2 border-transparent">
+                Logistik MMS
+            </button>
         </div>
 
-        <!-- Tab: Ringkasan (Executive Summary) -->
-        <div id="tab-ringkasan" class="tab-content">
-            <!-- New KPI Cards -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <div class="glass p-5 rounded-3xl border-b-4 border-indigo-500">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Stok (Botol)
-                            </p>
-                            <h3 id="kpiTotalBotol" class="text-3xl font-bold text-gray-800 mt-1">0</h3>
-                        </div>
-                        <span class="text-2xl">💊</span>
-                    </div>
+        <!-- Tab: Statistik -->
+        <div id="tab-statistik" class="tab-content">
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 no-print">
+                <div class="glass p-6 rounded-3xl border-l-8 border-indigo-500">
+                    <p class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Pelaporan</p>
+                    <h3 id="statTotal" class="text-4xl font-bold text-indigo-700 mt-2">0</h3>
                 </div>
-                <div class="glass p-5 rounded-3xl border-b-4 border-blue-500">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Wilayah Aktif</p>
-                            <h3 id="kpiActiveKab" class="text-3xl font-bold text-gray-800 mt-1">0</h3>
-                        </div>
-                        <span class="text-2xl">🗺️</span>
-                    </div>
-                </div>
-                <div class="glass p-5 rounded-3xl border-b-4 border-amber-500">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Hampir ED (6 Bln)
-                            </p>
-                            <h3 id="kpiNearExp" class="text-3xl font-bold text-amber-700 mt-1">0</h3>
-                        </div>
-                        <span class="text-2xl text-amber-500">⚠</span>
-                    </div>
-                </div>
-                <div class="glass p-5 rounded-3xl border-b-4 border-red-500">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-[10px] font-bold text-red-600 uppercase tracking-widest">Sudah ED</p>
-                            <h3 id="kpiExpired" class="text-3xl font-bold text-red-700 mt-1">0</h3>
-                        </div>
-                        <span class="text-2xl text-red-500">❌</span>
-                    </div>
+                <div class="glass p-6 rounded-3xl border-l-8 border-green-500">
+                    <p class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Kab/Kota Terjangkau</p>
+                    <h3 id="statRegency" class="text-4xl font-bold text-green-700 mt-2">0</h3>
                 </div>
             </div>
 
-            <!-- Main Chart & Recent Activity -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                <div class="lg:col-span-2 glass p-6 rounded-3xl">
-                    <h3 class="font-bold text-gray-800 mb-6 flex items-center gap-2">
-                        📈 Grafik Aktivitas Pelaporan per Kabupaten
-                    </h3>
+            <!-- Charts Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 no-print">
+                <div class="glass p-6 rounded-3xl">
+                    <h3 class="font-bold text-gray-800 mb-4">Laporan per Kabupaten/Kota</h3>
                     <div class="h-64">
-                        <canvas id="activityChart"></canvas>
+                        <canvas id="regencyChart"></canvas>
                     </div>
                 </div>
                 <div class="glass p-6 rounded-3xl">
-                    <h3 class="font-bold text-gray-800 mb-4">🔔 Aktivitas Terbaru</h3>
-                    <div id="recentActivityList" class="space-y-3 max-h-72 overflow-y-auto pr-2">
-                        <!-- Activity items -->
+                    <h3 class="font-bold text-gray-800 mb-4">Aktivitas Pelaporan Terakhir</h3>
+                    <div id="recentActivityList" class="space-y-3 max-h-64 overflow-y-auto pr-2">
+                        <!-- Tiny activity text injected here -->
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Tab: Logistik MMS (Inventory List) -->
-        <div id="tab-logistik" class="tab-content hidden">
-            <div class="glass rounded-3xl overflow-hidden mb-8">
-                <div class="p-6 border-b border-gray-100 flex justify-between items-center">
-                    <h3 class="font-bold text-gray-800">📦 Inventaris MMS & Status Kadaluarsa</h3>
-                    <button onclick="exportCSV()"
-                        class="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                        📥 Export CSV
-                    </button>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left">
-                        <thead class="bg-gray-50/50 text-[10px] uppercase font-bold text-gray-400">
-                            <tr>
-                                <th class="px-6 py-4">Status</th>
-                                <th class="px-6 py-4">Kabupaten</th>
-                                <th class="px-6 py-4">Puskesmas/IFK</th>
-                                <th class="px-6 py-4 text-center">Stok (Botol)</th>
-                                <th class="px-6 py-4">Tgl Kadaluarsa</th>
-                            </tr>
-                        </thead>
-                        <tbody id="inventoryTableBody" class="text-sm">
-                            <!-- Injected by JS -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tab: Riwayat (Raw Submissions) -->
-        <div id="tab-riwayat" class="tab-content hidden">
-            <div class="glass rounded-3xl overflow-hidden mb-8">
-                <div class="p-6 border-b border-gray-100 italic text-gray-500 text-sm">
-                    Menampilkan 50 riwayat submisi formulir terakhir.
+            <!-- Table -->
+            <div class="glass rounded-3xl overflow-hidden">
+                <div class="p-6 border-b border-gray-100">
+                    <h3 class="font-bold text-gray-800">Daftar Masukan Terbaru</h3>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left">
@@ -240,11 +152,61 @@
                                 <th class="px-6 py-4">Tipe</th>
                                 <th class="px-6 py-4">Pelapor</th>
                                 <th class="px-6 py-4">Kab/Kota</th>
-                                <th class="px-6 py-4 text-center">Aksi</th>
+                                <th class="px-6 py-4">Kecamatan</th>
+                                <th class="px-6 py-4">Puskesmas</th>
                             </tr>
                         </thead>
-                        <tbody id="submissionTableBody" class="text-sm">
-                            <!-- Injected by JS -->
+                        <tbody id="submissionTableBody" class="text-sm text-gray-600 divide-y divide-gray-100">
+                            <!-- Data rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Logistik -->
+        <div id="tab-logistik" class="tab-content hidden">
+            <!-- Expiry Alerts -->
+            <div id="expiryAlertSection" class="mb-8 hidden">
+                <h3 class="text-red-600 font-bold mb-4 flex items-center gap-2">⚠️ Peringatan Kadaluarsa (ED < 6
+                        Bulan)</h3>
+                        <div id="expiryAlertList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Cards -->
+                        </div>
+            </div>
+
+            <!-- Stock Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="glass p-6 rounded-3xl">
+                    <h3 class="font-bold text-gray-800 mb-4">Stok Botol per Wilayah</h3>
+                    <div class="h-64">
+                        <canvas id="stockChart"></canvas>
+                    </div>
+                </div>
+                <div class="glass p-6 rounded-3xl">
+                    <h3 class="font-bold text-gray-800 mb-4">Persentase Stok per Kab/Kota</h3>
+                    <div class="h-64 flex justify-center">
+                        <canvas id="stockPieChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logistics Table -->
+            <div class="glass rounded-3xl overflow-hidden">
+                <div class="p-6 border-b border-gray-100">
+                    <h3 class="font-bold text-gray-800">Ringkasan Stok Wilayah</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50/50 text-[10px] uppercase font-bold text-gray-400">
+                            <tr>
+                                <th class="px-6 py-4">Kabupaten/Kota</th>
+                                <th class="px-6 py-4">Total Botol</th>
+                                <th class="px-6 py-4">Total Tablet (x180)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logisticsTableBody" class="text-sm text-gray-600 divide-y divide-gray-100">
+                            <!-- Data rows -->
                         </tbody>
                     </table>
                 </div>
@@ -257,177 +219,209 @@
     </div>
 
     <script>
-        let dashboardChart = null;
+        let charts = {};
 
-        function showTab(tabId) {
-            // Hide all tab content
+        function showTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-            // Show only the selected tab
-            const targetTab = document.getElementById('tab-' + tabId);
-            if (targetTab) targetTab.classList.remove('hidden');
+            document.querySelectorAll('button[id^="btn-"]').forEach(b => b.classList.remove('tab-btn-active'));
 
-            // Deactivate all tab buttons
-            document.querySelectorAll('[id^="btn-"]').forEach(b => b.classList.remove('tab-btn-active'));
-            // Activate the selected tab button
-            const btn = document.getElementById('btn-' + tabId);
-            if (btn) btn.classList.add('tab-btn-active');
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            document.getElementById(`btn-${tabName}`).classList.add('tab-btn-active');
 
-            if (tabId === 'ringkasan') fetchSummary();
-            if (tabId === 'logistik') fetchInventory();
-            if (tabId === 'riwayat') fetchHistory();
+            // Lazy-render logistics charts only when that tab is opened
+            if (tabName === 'logistik' && window._lastLogisticsStats) {
+                renderStockCharts(window._lastLogisticsStats);
+            }
         }
 
-        async function fetchSummary() {
+        async function loadData() {
             try {
-                const res = await fetch('/api/dashboard-stats');
+                const res = await fetch('/api/dashboard-summary');
                 const data = await res.json();
 
-                document.getElementById('kpiTotalBotol').textContent = (data.total_botol || 0).toLocaleString();
-                document.getElementById('kpiActiveKab').textContent = data.active_kabupaten || 0;
-                document.getElementById('kpiExpired').textContent = data.expired || 0;
-                document.getElementById('kpiNearExp').textContent = data.near_expired || 0;
+                // Update Basic Stats
+                document.getElementById('statTotal').textContent = data.total_submissions;
+                document.getElementById('statRegency').textContent = data.total_regencies;
 
-                // Fill Filters only if empty
-                const filterKab = document.getElementById('filterKabupaten');
-                if (filterKab.options.length <= 1) {
-                    data.activity_chart.forEach(a => {
-                        const opt = document.createElement('option');
-                        opt.value = a.label;
-                        opt.textContent = a.label;
-                        filterKab.appendChild(opt);
+                // Update Regency Chart
+                renderRegencyChart(data.regency_stats);
+
+                // Update Recent activity text list
+                const activityList = document.getElementById('recentActivityList');
+                activityList.innerHTML = data.submissions.slice(0, 10).map(s => `
+                    <div class="text-xs p-2 bg-indigo-50/30 rounded-lg border border-indigo-50">
+                        <span class="font-bold text-indigo-700">${s.reporter_name}</span> melapor dari
+                        <span class="font-semibold">${s.puskesmas}</span>
+                    </div>
+                `).join('');
+
+                // Update Main Table (XSS-safe via DOM)
+                const tableBody = document.getElementById('submissionTableBody');
+                tableBody.innerHTML = '';
+                if (data.submissions.length === 0) {
+                    const emptyRow = tableBody.insertRow();
+                    const cell = emptyRow.insertCell();
+                    cell.colSpan = 6; cell.className = 'px-6 py-10 text-center text-gray-400';
+                    cell.textContent = 'Belum ada data.';
+                } else {
+                    data.submissions.forEach(sub => {
+                        const fmt = new Date(sub.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                        const typeLabel = sub.tipe_pelapor === 'ifk' ?
+                            '<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] uppercase font-bold">IFK/Kota</span>' :
+                            '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] uppercase font-bold">Puskesmas</span>';
+
+                        const row = tableBody.insertRow();
+                        row.className = 'hover:bg-white/50 transition-colors';
+
+                        // Using innerHTML for the type label badge, textContent for others
+                        const tdTime = row.insertCell(); tdTime.className = 'px-6 py-4 text-xs text-gray-400'; tdTime.textContent = fmt;
+                        const tdType = row.insertCell(); tdType.className = 'px-6 py-4'; tdType.innerHTML = typeLabel;
+                        const tdName = row.insertCell(); tdName.className = 'px-6 py-4 font-semibold text-gray-800'; tdName.textContent = sub.reporter_name;
+                        const tdKab = row.insertCell(); tdKab.className = 'px-6 py-4'; tdKab.textContent = sub.kabupaten;
+                        const tdKec = row.insertCell(); tdKec.className = 'px-6 py-4'; tdKec.textContent = sub.kecamatan;
+                        const tdPusk = row.insertCell(); tdPusk.className = 'px-6 py-4 italic'; tdPusk.textContent = sub.puskesmas;
                     });
                 }
 
-                renderActivityChart(data.activity_chart);
-            } catch (err) { console.error("Summary error:", err); }
+                // --- Logistics Tab Data ---
+
+                // Stock Table
+                const logTableBody = document.getElementById('logisticsTableBody');
+                logTableBody.innerHTML = '';
+                if (data.logistics_stats.length === 0) {
+                    const emptyRow = logTableBody.insertRow();
+                    const cell = emptyRow.insertCell();
+                    cell.colSpan = 3;
+                    cell.className = 'px-6 py-10 text-center text-gray-400';
+                    cell.textContent = 'Belum ada data stok.';
+                } else {
+                    data.logistics_stats.forEach(l => {
+                        const row = logTableBody.insertRow();
+                        row.className = 'hover:bg-white/50';
+                        const tdKab = row.insertCell(); tdKab.className = 'px-6 py-4 font-bold text-gray-700'; tdKab.textContent = l.kabupaten;
+                        const tdBotol = row.insertCell(); tdBotol.className = 'px-6 py-4 text-indigo-600 font-bold'; tdBotol.textContent = `${l.total_botol.toLocaleString()} Botol`;
+                        const tdTab = row.insertCell(); tdTab.className = 'px-6 py-4 text-green-600 font-bold'; tdTab.textContent = `${l.total_tab.toLocaleString()} Tablet`;
+                    });
+                }
+
+                // Store data for lazy chart rendering (render when tab is opened)
+                window._lastLogisticsStats = data.logistics_stats;
+
+                // Expiry Alerts
+                renderExpiryAlerts(data.expiry_alerts);
+
+                // Only render stock charts if logistics tab is active
+                if (!document.getElementById('tab-logistik').classList.contains('hidden')) {
+                    renderStockCharts(data.logistics_stats);
+                }
+
+            } catch (err) {
+                console.error("Dashboard error:", err);
+            }
         }
 
-        function renderActivityChart(chartData) {
-            const ctx = document.getElementById('activityChart').getContext('2d');
-            if (dashboardChart) dashboardChart.destroy();
+        function renderRegencyChart(stats) {
+            const ctx = document.getElementById('regencyChart').getContext('2d');
+            if (charts.regency) charts.regency.destroy();
 
-            dashboardChart = new Chart(ctx, {
+            charts.regency = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: chartData.map(d => d.label),
+                    labels: stats.map(s => s.kabupaten),
                     datasets: [{
                         label: 'Jumlah Laporan',
-                        data: chartData.map(d => d.value),
-                        backgroundColor: 'rgba(99, 102, 241, 0.7)',
-                        hoverBackgroundColor: '#4f46e5',
-                        borderRadius: 12,
-                        borderSkipped: false,
+                        data: stats.map(s => s.count),
+                        backgroundColor: 'rgba(79, 70, 229, 0.6)',
+                        borderColor: 'rgb(79, 70, 229)',
+                        borderWidth: 1,
+                        borderRadius: 8
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: { backgroundColor: '#1e293b', padding: 12, borderRadius: 12 }
-                    },
-                    scales: {
-                        y: { beginAtZero: true, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { font: { family: 'Outfit', size: 10 } } },
-                        x: { grid: { display: false }, ticks: { font: { family: 'Outfit', size: 10 } } }
-                    }
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
                 }
             });
         }
 
-        async function fetchInventory() {
-            const kab = document.getElementById('filterKabupaten').value;
-            try {
-                const res = await fetch(`/api/inventory-list${kab ? '?kabupaten=' + encodeURIComponent(kab) : ''}`);
-                const data = await res.json();
+        function safe(str) {
+            const d = document.createElement('div');
+            d.textContent = str || '';
+            return d.innerHTML;
+        }
 
-                window.currentInventory = data;
-
-                const tableBody = document.getElementById('inventoryTableBody');
-                tableBody.innerHTML = '';
-
-                if (data.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="5" class="px-6 py-10 text-center text-gray-400">Belum ada data inventaris.</td></tr>';
-                    return;
+        function renderStockCharts(stats) {
+            // Bar Chart Stock
+            const ctxBar = document.getElementById('stockChart').getContext('2d');
+            if (charts.stockBar) charts.stockBar.destroy();
+            charts.stockBar = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: stats.map(s => s.kabupaten),
+                    datasets: [{
+                        label: 'Total Botol',
+                        data: stats.map(s => s.total_botol),
+                        backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                        borderColor: 'rgb(16, 185, 129)',
+                        borderWidth: 1,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y'
                 }
+            });
 
-                data.forEach(item => {
-                    const row = tableBody.insertRow();
-                    row.className = 'hover:bg-indigo-50/30 transition-colors border-b border-gray-50';
-
-                    let statusHtml = '';
-                    if (item.status === 'EXP') statusHtml = '<span class="status-badge-exp px-2 py-1 rounded text-[10px] font-bold">EXPIRED</span>';
-                    else if (item.status === 'ALERT') statusHtml = '<span class="status-badge-alert px-2 py-1 rounded text-[10px] font-bold">NEAR ED</span>';
-                    else statusHtml = '<span class="status-badge-safe px-2 py-1 rounded text-[10px] font-bold">SAFE</span>';
-
-                    row.insertCell().innerHTML = `<div class="px-6 py-4">${statusHtml}</div>`;
-                    row.insertCell().innerHTML = `<div class="px-6 py-4 font-semibold text-gray-700">${item.kabupaten}</div>`;
-                    row.insertCell().innerHTML = `<div class="px-6 py-4 text-gray-500 text-[11px]">${item.puskesmas || 'IFK'}</div>`;
-                    row.insertCell().innerHTML = `<div class="px-6 py-4 text-center font-bold text-indigo-600">${(item.botol || 0).toLocaleString()}</div>`;
-                    row.insertCell().innerHTML = `<div class="px-6 py-4 text-[11px] ${item.status === 'EXP' ? 'text-red-600 font-bold' : 'text-gray-400'}">${item.ed}</div>`;
-                });
-            } catch (err) { console.error("Inventory error:", err); }
+            // Pie Chart Stock
+            const ctxPie = document.getElementById('stockPieChart').getContext('2d');
+            if (charts.stockPie) charts.stockPie.destroy();
+            charts.stockPie = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: stats.map(s => s.kabupaten),
+                    datasets: [{
+                        data: stats.map(s => s.total_botol),
+                        backgroundColor: [
+                            'rgba(79, 70, 229, 0.7)', 'rgba(16, 185, 129, 0.7)',
+                            'rgba(245, 158, 11, 0.7)', 'rgba(239, 68, 68, 0.7)',
+                            'rgba(139, 92, 246, 0.7)', 'rgba(236, 72, 153, 0.7)'
+                        ]
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
         }
 
-        async function fetchHistory() {
-            try {
-                const res = await fetch('/api/dashboard-summary');
-                const data = await res.json();
+        function renderExpiryAlerts(alerts) {
+            const section = document.getElementById('expiryAlertSection');
+            const list = document.getElementById('expiryAlertList');
 
-                const tableBody = document.getElementById('submissionTableBody');
-                tableBody.innerHTML = '';
+            if (alerts.length === 0) {
+                section.classList.add('hidden');
+                return;
+            }
 
-                data.submissions.forEach(sub => {
-                    const fmt = new Date(sub.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-                    const typeLabel = sub.tipe_pelapor === 'ifk' ?
-                        '<span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[9px] uppercase font-bold">IFK</span>' :
-                        '<span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[9px] uppercase font-bold">PSM</span>';
-
-                    const row = tableBody.insertRow();
-                    row.className = 'hover:bg-gray-50/50 transition-colors border-b border-gray-50';
-                    row.insertCell().innerHTML = `<div class="px-6 py-4 text-[10px] text-gray-400">${fmt}</div>`;
-                    row.insertCell().innerHTML = `<div class="px-6 py-4">${typeLabel}</div>`;
-                    row.insertCell().innerHTML = `<div class="px-6 py-4 font-semibold text-gray-700 text-xs">${sub.reporter_name}</div>`;
-                    row.insertCell().innerHTML = `<div class="px-6 py-4 text-xs text-gray-500">${sub.kabupaten}</div>`;
-
-                    const tdAction = row.insertCell();
-                    tdAction.className = 'px-6 py-4 text-center';
-                    tdAction.innerHTML = `<button class="text-indigo-600 hover:text-indigo-800 text-[10px] font-bold">Detail</button>`;
-                });
-
-                // Update activity list in Ringkasan too
-                const activityList = document.getElementById('recentActivityList');
-                if (activityList) {
-                    activityList.innerHTML = data.submissions.slice(0, 10).map(s => `
-                        <div class="text-[11px] p-3 bg-white border border-gray-100 rounded-2xl shadow-sm flex flex-col gap-1">
-                            <div class="flex justify-between">
-                                <span class="font-bold text-gray-800">${s.reporter_name}</span>
-                                <span class="text-[9px] text-gray-400">${new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                            <span class="text-gray-500">${s.puskesmas || 'IFK'} - ${s.kabupaten}</span>
-                        </div>
-                    `).join('');
-                }
-            } catch (err) { console.error("History error:", err); }
+            section.classList.remove('hidden');
+            list.innerHTML = alerts.map(a => `
+                <div class="bg-red-50 border border-red-100 p-4 rounded-2xl flex justify-between items-center">
+                    <div>
+                        <p class="font-bold text-red-800 text-sm">${a.puskesmas}</p>
+                        <p class="text-[10px] text-red-600 uppercase font-bold">${a.kabupaten}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs font-bold text-red-700">ED: ${new Date(a.ed).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}</p>
+                        <p class="text-[10px] text-red-500">${a.jumlah_botol} Botol</p>
+                    </div>
+                </div>
+            `).join('');
         }
 
-        function exportCSV() {
-            if (!window.currentInventory || window.currentInventory.length === 0) return;
-
-            const headers = ["Status", "Kabupaten", "Puskesmas", "Botol", "Tablet", "Kadaluarsa"];
-            const rows = window.currentInventory.map(i => [i.status, i.kabupaten, i.puskesmas, i.botol, i.tablet, i.ed]);
-
-            const content = [headers, ...rows].map(e => e.join(",")).join("\n");
-            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = `inventory_mms_${new Date().toISOString().split('T')[0]}.csv`;
-            link.click();
-        }
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            showTab('ringkasan');
-        });
+        // Init
+        showTab('statistik');
+        loadData();
     </script>
 </body>
 
