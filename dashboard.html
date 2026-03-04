@@ -145,6 +145,7 @@
                         <thead class="bg-gray-50/50 text-[10px] uppercase font-bold text-gray-400">
                             <tr>
                                 <th class="px-6 py-4">Waktu</th>
+                                <th class="px-6 py-4">Tipe</th>
                                 <th class="px-6 py-4">Pelapor</th>
                                 <th class="px-6 py-4">Kab/Kota</th>
                                 <th class="px-6 py-4">Kecamatan</th>
@@ -245,7 +246,7 @@
                 const activityList = document.getElementById('recentActivityList');
                 activityList.innerHTML = data.submissions.slice(0, 10).map(s => `
                     <div class="text-xs p-2 bg-indigo-50/30 rounded-lg border border-indigo-50">
-                        <span class="font-bold text-indigo-700">${s.reporter_name}</span> melapor dari 
+                        <span class="font-bold text-indigo-700">${s.reporter_name}</span> melapor dari
                         <span class="font-semibold">${s.puskesmas}</span>
                     </div>
                 `).join('');
@@ -256,25 +257,25 @@
                 if (data.submissions.length === 0) {
                     const emptyRow = tableBody.insertRow();
                     const cell = emptyRow.insertCell();
-                    cell.colSpan = 5; cell.className = 'px-6 py-10 text-center text-gray-400';
+                    cell.colSpan = 6; cell.className = 'px-6 py-10 text-center text-gray-400';
                     cell.textContent = 'Belum ada data.';
                 } else {
                     data.submissions.forEach(sub => {
+                        const fmt = new Date(sub.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                        const typeLabel = sub.tipe_pelapor === 'ifk' ?
+                            '<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] uppercase font-bold">IFK/Kota</span>' :
+                            '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] uppercase font-bold">Puskesmas</span>';
+
                         const row = tableBody.insertRow();
                         row.className = 'hover:bg-white/50 transition-colors';
-                        const fmt = new Date(sub.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-                        const cells = [
-                            [fmt, 'px-6 py-4 text-xs text-gray-400'],
-                            [sub.reporter_name, 'px-6 py-4 font-semibold text-gray-800'],
-                            [sub.kabupaten, 'px-6 py-4'],
-                            [sub.kecamatan, 'px-6 py-4'],
-                            [sub.puskesmas, 'px-6 py-4 italic']
-                        ];
-                        cells.forEach(([text, cls]) => {
-                            const td = row.insertCell();
-                            td.className = cls;
-                            td.textContent = text;
-                        });
+
+                        // Using innerHTML for the type label badge, textContent for others
+                        const tdTime = row.insertCell(); tdTime.className = 'px-6 py-4 text-xs text-gray-400'; tdTime.textContent = fmt;
+                        const tdType = row.insertCell(); tdType.className = 'px-6 py-4'; tdType.innerHTML = typeLabel;
+                        const tdName = row.insertCell(); tdName.className = 'px-6 py-4 font-semibold text-gray-800'; tdName.textContent = sub.reporter_name;
+                        const tdKab = row.insertCell(); tdKab.className = 'px-6 py-4'; tdKab.textContent = sub.kabupaten;
+                        const tdKec = row.insertCell(); tdKec.className = 'px-6 py-4'; tdKec.textContent = sub.kecamatan;
+                        const tdPusk = row.insertCell(); tdPusk.className = 'px-6 py-4 italic'; tdPusk.textContent = sub.puskesmas;
                     });
                 }
 

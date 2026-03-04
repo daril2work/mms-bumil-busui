@@ -217,6 +217,7 @@ def init_db():
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS mms_records (
                 id SERIAL PRIMARY KEY,
+                tipe_pelapor TEXT DEFAULT 'puskesmas',
                 reporter_name TEXT,
                 kabupaten TEXT,
                 kecamatan TEXT,
@@ -224,6 +225,11 @@ def init_db():
                 created_at TIMESTAMPTZ DEFAULT now()
             )
         ''')
+        # Check if column exists, if not add it (PostgreSQL migration)
+        cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='mms_records' AND column_name='tipe_pelapor'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE mms_records ADD COLUMN tipe_pelapor TEXT DEFAULT 'puskesmas'")
+            
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS mms_batches (
                 id SERIAL PRIMARY KEY,
@@ -249,6 +255,7 @@ def init_db():
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS mms_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipe_pelapor TEXT DEFAULT 'puskesmas',
                 reporter_name TEXT,
                 kabupaten TEXT,
                 kecamatan TEXT,
@@ -256,6 +263,12 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Check if column exists, if not add it (SQLite migration)
+        cursor.execute("PRAGMA table_info(mms_records)")
+        cols = [c[1] for c in cursor.fetchall()]
+        if 'tipe_pelapor' not in cols:
+            cursor.execute("ALTER TABLE mms_records ADD COLUMN tipe_pelapor TEXT DEFAULT 'puskesmas'")
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS mms_batches (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -414,7 +427,7 @@ async def get_dashboard_summary():
 
     # 5. Recent submissions
     cursor.execute("""
-        SELECT id, reporter_name, kabupaten, kecamatan, puskesmas, created_at 
+        SELECT id, reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor 
         FROM mms_records 
         ORDER BY created_at DESC 
         LIMIT 50
@@ -422,7 +435,8 @@ async def get_dashboard_summary():
     submissions = [
         {
             "id": r[0], "reporter_name": r[1], "kabupaten": r[2], 
-            "kecamatan": r[3], "puskesmas": r[4], "created_at": str(r[5])
+            "kecamatan": r[3], "puskesmas": r[4], "created_at": str(r[5]),
+            "tipe_pelapor": r[6] if len(r) > 6 else 'puskesmas'
         }
         for r in cursor.fetchall()
     ]
@@ -439,17 +453,28 @@ async def get_dashboard_summary():
 
 @app.post("/submit")
 async def submit_form(
+    tipe_pelapor: str = Form("puskesmas"),
     reporter_name: str = Form(...),
     kabupaten: str = Form(...),
-    kecamatan: str = Form(...),
-    puskesmas: str = Form(...),
+    kecamatan: str = Form(None),
+    puskesmas: str = Form(None),
     batches_json: str = Form(...)
 ):
     # Input validation
     reporter_name = reporter_name.strip()
-    puskesmas = puskesmas.strip()
-    if not reporter_name or not kabupaten or not kecamatan or not puskesmas:
-        return {"status": "error", "message": "Semua field wajib diisi."}
+    puskesmas = (puskesmas or "").strip()
+    kecamatan = (kecamatan or "").strip()
+    
+    # Validation logic based on type
+    if tipe_pelapor == "puskesmas":
+        if not reporter_name or not kabupaten or not kecamatan or not puskesmas:
+            return {"status": "error", "message": "Semua field Puskesmas wajib diisi."}
+    else: # IFK
+        if not reporter_name or not kabupaten:
+            return {"status": "error", "message": "Nama Pelapor dan Kabupaten wajib diisi."}
+        # Set N/A for IFK
+        kecamatan = "IFK/Kota"
+        puskesmas = f"IFK {kabupaten}"
 
     try:
         batches = json.loads(batches_json)
@@ -471,14 +496,14 @@ async def submit_form(
             cursor = conn.cursor()
             if USE_POSTGRES:
                 cursor.execute(
-                    "INSERT INTO mms_records (reporter_name, kabupaten, kecamatan, puskesmas) VALUES (%s, %s, %s, %s) RETURNING id",
-                    (reporter_name, kabupaten, kecamatan, puskesmas)
+                    "INSERT INTO mms_records (tipe_pelapor, reporter_name, kabupaten, kecamatan, puskesmas) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                    (tipe_pelapor, reporter_name, kabupaten, kecamatan, puskesmas)
                 )
                 submission_id = cursor.fetchone()[0]
             else:
                 cursor.execute(
-                    "INSERT INTO mms_records (reporter_name, kabupaten, kecamatan, puskesmas) VALUES (?, ?, ?, ?)",
-                    (reporter_name, kabupaten, kecamatan, puskesmas)
+                    "INSERT INTO mms_records (tipe_pelapor, reporter_name, kabupaten, kecamatan, puskesmas) VALUES (?, ?, ?, ?, ?)",
+                    (tipe_pelapor, reporter_name, kabupaten, kecamatan, puskesmas)
                 )
                 submission_id = cursor.lastrowid
 
