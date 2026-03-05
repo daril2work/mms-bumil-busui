@@ -278,6 +278,7 @@
                                 <th class="px-6 py-4">Kecamatan</th>
                                 <th class="px-6 py-4">Nama Unit</th>
                                 <th class="px-6 py-4 text-center">Total Botol</th>
+                                <th class="px-6 py-4">Status ED</th>
                                 <th class="px-6 py-4">Update Terakhir</th>
                             </tr>
                         </thead>
@@ -569,15 +570,102 @@
                     row.insertCell().innerHTML = typeLabel;
                     row.insertCell().textContent = item.kabupaten;
                     row.insertCell().textContent = item.kecamatan || '-';
-                    row.insertCell().textContent = item.puskesmas;
+
+                    const tdUnit = row.insertCell();
+                    tdUnit.className = 'px-6 py-4 flex items-center gap-2 font-semibold cursor-pointer hover:text-indigo-600';
+                    tdUnit.onclick = () => showUnitDetail(item.puskesmas, item.kabupaten);
+                    tdUnit.textContent = item.puskesmas;
+
                     const tdBotol = row.insertCell();
                     tdBotol.className = 'px-6 py-4 text-center font-bold text-indigo-600';
                     tdBotol.textContent = item.total_botol.toLocaleString();
+
+                    const tdStatus = row.insertCell();
+                    tdStatus.className = 'px-6 py-4 text-center';
+                    if (item.has_critical_ed) {
+                        tdStatus.innerHTML = '<span title="Stok Kritis (< 6 Bln)" class="cursor-help">🚩</span>';
+                    } else if (item.has_warning_ed) {
+                        tdStatus.innerHTML = '<span title="Stok Waspada (6-12 Bln)" class="cursor-help">⚠️</span>';
+                    } else {
+                        tdStatus.innerHTML = '<span title="Stok Aman" class="text-green-500">✅</span>';
+                    }
+
                     row.insertCell().textContent = lastUpdate;
                 });
             } catch (err) {
                 console.error("Tracing error:", err);
             }
+        }
+
+        async function showUnitDetail(unitName, kabupaten) {
+            const modal = document.getElementById('baseModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalBody = document.getElementById('modalBody');
+
+            modalTitle.textContent = `Detail Batch: ${unitName}`;
+            modalBody.innerHTML = '<div class="flex justify-center p-8"><span class="animate-spin text-4xl">⌛</span></div>';
+            modal.classList.remove('hidden');
+
+            try {
+                const res = await fetch(`/api/unit-batches?puskesmas=${encodeURIComponent(unitName)}&kabupaten=${encodeURIComponent(kabupaten)}`);
+                const batches = await res.json();
+
+                if (batches.length === 0) {
+                    modalBody.innerHTML = '<p class="text-center text-gray-500 p-8">Tidak ada data batch ditemukan.</p>';
+                    return;
+                }
+
+                let html = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-50 font-bold text-gray-400 uppercase text-[10px]">
+                                <tr>
+                                    <th class="px-4 py-3">Jumlah Botol</th>
+                                    <th class="px-4 py-3">Jumlah Tablet</th>
+                                    <th class="px-4 py-3">Tgl Kadaluarsa</th>
+                                    <th class="px-4 py-3">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                `;
+
+                const now = new Date();
+                const sixM = new Date(); sixM.setMonth(now.getMonth() + 6);
+                const twelveM = new Date(); twelveM.setMonth(now.getMonth() + 12);
+
+                batches.forEach(b => {
+                    const ed = new Date(b.tgl_kadaluarsa);
+                    let status = '<span class="text-green-500 font-bold">Aman</span>';
+                    let rowClass = "";
+
+                    if (ed <= sixM) {
+                        status = '<span class="text-red-600 font-bold">Kritis</span>';
+                        rowClass = "bg-red-50";
+                    } else if (ed <= twelveM) {
+                        status = '<span class="text-amber-600 font-bold">Waspada</span>';
+                        rowClass = "bg-amber-50";
+                    }
+
+                    html += `
+                        <tr class="${rowClass}">
+                            <td class="px-4 py-3 font-bold">${b.jumlah_botol.toLocaleString()}</td>
+                            <td class="px-4 py-3">${b.jumlah_tab.toLocaleString()}</td>
+                            <td class="px-4 py-3">${ed.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                            <td class="px-4 py-3">${status}</td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+                modalBody.innerHTML = html;
+
+            } catch (err) {
+                modalBody.innerHTML = `<p class="text-red-500 p-4">Error loading data: ${err.message}</p>`;
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('baseModal').classList.add('hidden');
         }
 
         function filterTracingTable() {
@@ -603,6 +691,26 @@
         showTab('statistik');
         loadData();
     </script>
+
+    <!-- Base Modal -->
+    <div id="baseModal"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm hidden no-print">
+        <div
+            class="glass w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-white/80">
+                <h3 id="modalTitle" class="text-xl font-bold text-gray-800">Detail Information</h3>
+                <button onclick="closeModal()"
+                    class="text-gray-400 hover:text-red-500 transition-colors text-2xl font-bold">×</button>
+            </div>
+            <div id="modalBody" class="p-6 max-h-[70vh] overflow-y-auto">
+                <!-- Content injected here -->
+            </div>
+            <div class="p-4 bg-gray-50 text-right border-t border-gray-100">
+                <button onclick="closeModal()"
+                    class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg">Tutup</button>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>

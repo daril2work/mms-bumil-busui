@@ -545,8 +545,12 @@ async def export_excel(background_tasks: BackgroundTasks):
 
 @app.get("/api/tracing-data")
 async def get_tracing_data(kabupaten: str = None):
-    """Aggregate stock data per unit (Puskesmas/IFK) for tracing."""
+    """Aggregate stock data per unit (Puskesmas/IFK) for tracing with ED flags."""
     try:
+        now_str = time.strftime("%Y-%m-%d")
+        six_m_str = time.strftime("%Y-%m-%d", time.localtime(time.time() + 180*24*3600))
+        twelve_m_str = time.strftime("%Y-%m-%d", time.localtime(time.time() + 365*24*3600))
+        
         with get_db_conn() as conn:
             with conn.cursor() as cursor:
                 where_clause = ""
@@ -563,14 +567,16 @@ async def get_tracing_data(kabupaten: str = None):
                         r.puskesmas,
                         SUM(b.jumlah_botol) as total_botol,
                         SUM(b.jumlah_tab) as total_tab,
-                        MAX(r.created_at) as last_update
+                        MAX(r.created_at) as last_update,
+                        BOOL_OR(b.tgl_kadaluarsa <= %s) as has_critical_ed,
+                        BOOL_OR(b.tgl_kadaluarsa > %s AND b.tgl_kadaluarsa <= %s) as has_warning_ed
                     FROM mms_records r
                     JOIN mms_batches b ON r.id = b.submission_id
                     {where_clause}
                     GROUP BY r.tipe_pelapor, r.kabupaten, r.kecamatan, r.puskesmas
                     ORDER BY last_update DESC
                 """
-                cursor.execute(query, tuple(params))
+                cursor.execute(query, tuple([six_m_str, six_m_str, twelve_m_str] + params))
                 rows = cursor.fetchall()
                 cols = [desc[0] for desc in cursor.description]
                 
@@ -583,6 +589,29 @@ async def get_tracing_data(kabupaten: str = None):
                 return results
     except Exception as e:
         print(f"[Tracing API Error] {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+@app.get("/api/unit-batches")
+async def get_unit_batches(puskesmas: str, kabupaten: str):
+    """Get all batches for a specific unit (Puskesmas/IFK) within a kabupaten."""
+    try:
+        with get_db_conn() as conn:
+            with conn.cursor() as cursor:
+                query = """
+                    SELECT b.jumlah_botol, b.jumlah_tab, b.tgl_kadaluarsa
+                    FROM mms_batches b
+                    JOIN mms_records r ON b.submission_id = r.id
+                    WHERE r.puskesmas = %s AND r.kabupaten = %s
+                    ORDER BY b.tgl_kadaluarsa ASC
+                """
+                cursor.execute(query, (puskesmas, kabupaten))
+                rows = cursor.fetchall()
+                return [
+                    {"jumlah_botol": r[0], "jumlah_tab": r[1], "tgl_kadaluarsa": str(r[2])}
+                    for r in rows
+                ]
+    except Exception as e:
+        print(f"[Unit Batches Error] {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 @app.post("/submit")
