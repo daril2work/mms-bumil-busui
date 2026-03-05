@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
 import psycopg2
 import requests
 import json
@@ -25,9 +25,7 @@ _env = load_env()
 SATUSEHAT_CLIENT_ID     = _env.get("SATUSEHAT_CLIENT_ID", "").strip()
 SATUSEHAT_CLIENT_SECRET = _env.get("SATUSEHAT_CLIENT_SECRET", "").strip()
 USE_SANDBOX             = _env.get("USE_SANDBOX", "true").lower() == "true"
-DATABASE_URL            = _env.get("DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip()
-
-DATABASE_URL            = _env.get("DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip()
+DATABASE_URL = _env.get("DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip()
 
 if not DATABASE_URL:
     print("❌ CRITICAL ERROR: DATABASE_URL not found in .env or environment!")
@@ -474,10 +472,13 @@ async def get_dashboard_summary(page: int = 1, page_size: int = 10, kabupaten: s
     }
 
 @app.get("/api/export-excel")
-async def export_excel():
-    """Export all records and batches to a flat Excel file."""
+async def export_excel(background_tasks: BackgroundTasks):
+    """Export all records and batches to a flat Excel file using FileResponse."""
     import pandas as pd
-    import io
+    import os
+    
+    temp_file = f"export_{int(time.time())}.xlsx"
+    print(f"[Export] Starting Excel generation to {temp_file}...")
     
     try:
         with get_db_conn() as conn:
@@ -502,31 +503,45 @@ async def export_excel():
                 rows = cursor.fetchall()
                 cols = [desc[0] for desc in cursor.description]
                 df = pd.DataFrame(rows, columns=cols)
+                print(f"[Export] Fetched {len(df)} rows.")
         
         # Format dates for Excel
         if not df.empty:
-            df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime('%Y-%m-%d %H:%M')
+            if 'created_at' in df.columns:
+                df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime('%Y-%m-%d %H:%M')
+            if 'tgl_kadaluarsa' in df.columns:
+                # Handle potential None or string dates efficiently
+                df['tgl_kadaluarsa'] = pd.to_datetime(df['tgl_kadaluarsa'], errors='coerce').dt.strftime('%Y-%m-%d')
             
-        # Create Excel in memory
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Backup MMS Data')
+        # Create Excel using xlsxwriter for maximum reliability
+        df.to_excel(temp_file, index=False, sheet_name='Backup MMS Data', engine='xlsxwriter')
         
-        output.seek(0)
+        filename = f"backup_mms_{time.strftime('%Y%m%d_%H%M%S')}.xlsx"
         
-        headers = {
-            'Content-Disposition': 'attachment; filename="backup_mms_data.xlsx"',
-            'Cache-Control': 'no-cache'
-        }
-        from fastapi.responses import Response
-        return Response(
-            content=output.getvalue(), 
-            headers=headers, 
+        # Add cleanup task
+        def remove_temp_file(path: str):
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+                    print(f"[Export] Cleaned up {path}")
+            except Exception as e:
+                print(f"[Export Cleanup Error] {e}")
+
+        background_tasks.add_task(remove_temp_file, temp_file)
+
+        print(f"[Export] Excel generated locally. Serving via FileResponse.")
+        return FileResponse(
+            path=temp_file,
+            filename=filename,
             media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     except Exception as e:
         print(f"[Export Error] {e}")
-        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+        import traceback
+        traceback.print_exc()
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        return JSONResponse(status_code=500, content={"status": "error", "message": f"Export failed: {str(e)}"})
 
 @app.post("/submit")
 async def submit_form(
