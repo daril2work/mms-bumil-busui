@@ -543,6 +543,48 @@ async def export_excel(background_tasks: BackgroundTasks):
             os.remove(temp_file)
         return JSONResponse(status_code=500, content={"status": "error", "message": f"Export failed: {str(e)}"})
 
+@app.get("/api/tracing-data")
+async def get_tracing_data(kabupaten: str = None):
+    """Aggregate stock data per unit (Puskesmas/IFK) for tracing."""
+    try:
+        with get_db_conn() as conn:
+            with conn.cursor() as cursor:
+                where_clause = ""
+                params = []
+                if kabupaten and kabupaten != "Semua Kabupaten":
+                    where_clause = " WHERE r.kabupaten = %s"
+                    params = [kabupaten]
+
+                query = f"""
+                    SELECT 
+                        r.tipe_pelapor,
+                        r.kabupaten,
+                        r.kecamatan,
+                        r.puskesmas,
+                        SUM(b.jumlah_botol) as total_botol,
+                        SUM(b.jumlah_tab) as total_tab,
+                        MAX(r.created_at) as last_update
+                    FROM mms_records r
+                    JOIN mms_batches b ON r.id = b.submission_id
+                    {where_clause}
+                    GROUP BY r.tipe_pelapor, r.kabupaten, r.kecamatan, r.puskesmas
+                    ORDER BY last_update DESC
+                """
+                cursor.execute(query, tuple(params))
+                rows = cursor.fetchall()
+                cols = [desc[0] for desc in cursor.description]
+                
+                results = []
+                for r in rows:
+                    item = dict(zip(cols, r))
+                    item['last_update'] = str(item['last_update'])
+                    results.append(item)
+                
+                return results
+    except Exception as e:
+        print(f"[Tracing API Error] {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
 @app.post("/submit")
 async def submit_form(
     tipe_pelapor: str = Form("puskesmas"),

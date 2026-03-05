@@ -111,6 +111,10 @@
                 class="px-6 py-3 font-semibold text-gray-500 hover:text-indigo-600 transition-all border-b-2 border-transparent">
                 Logistik MMS
             </button>
+            <button onclick="showTab('tracing')" id="btn-tracing"
+                class="px-6 py-3 font-semibold text-gray-500 hover:text-indigo-600 transition-all border-b-2 border-transparent">
+                Tracing Stok
+            </button>
         </div>
 
         <!-- Tab: Statistik -->
@@ -256,6 +260,35 @@
             </div>
         </div>
 
+        <!-- Tab: Tracing -->
+        <div id="tab-tracing" class="tab-content hidden">
+            <div class="glass rounded-3xl overflow-hidden">
+                <div class="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <h3 class="font-bold text-gray-800 text-center md:text-left">Detail Tracing Stok (Unit)</h3>
+                    <input type="text" id="tracingSearch" onkeyup="filterTracingTable()"
+                        placeholder="Cari Unit atau Kecamatan..."
+                        class="px-4 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-100 w-full md:w-64">
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left" id="tracingTable">
+                        <thead class="bg-gray-50/50 text-[10px] uppercase font-bold text-gray-400">
+                            <tr>
+                                <th class="px-6 py-4">Tipe</th>
+                                <th class="px-6 py-4">Kabupaten</th>
+                                <th class="px-6 py-4">Kecamatan</th>
+                                <th class="px-6 py-4">Nama Unit</th>
+                                <th class="px-6 py-4 text-center">Total Botol</th>
+                                <th class="px-6 py-4">Update Terakhir</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tracingTableBody" class="text-sm text-gray-600 divide-y divide-gray-100">
+                            <!-- Data rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <div class="hidden print:block mt-8 text-xs text-center text-gray-400">
             Himpun Data MMS System © 2026
         </div>
@@ -275,6 +308,10 @@
             // Lazy-render logistics charts only when that tab is opened
             if (tabName === 'logistik' && window._lastLogisticsStats) {
                 renderStockCharts(window._lastLogisticsStats);
+            }
+
+            if (tabName === 'tracing') {
+                loadTracingData();
             }
         }
 
@@ -502,6 +539,64 @@
                     </div>
                 </div>
             `).join('');
+        }
+
+        async function loadTracingData() {
+            try {
+                const kab = document.getElementById('filterKabupaten').value;
+                const url = `/api/tracing-data?kabupaten=${encodeURIComponent(kab)}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                const tableBody = document.getElementById('tracingTableBody');
+                tableBody.innerHTML = '';
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-10 text-center text-gray-400">Tidak ada data tracing.</td></tr>';
+                    return;
+                }
+
+                data.forEach(item => {
+                    const row = tableBody.insertRow();
+                    row.className = 'hover:bg-white/50 transition-colors';
+
+                    const typeLabel = item.tipe_pelapor === 'ifk' ?
+                        '<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] uppercase font-bold">IFK/Kota</span>' :
+                        '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] uppercase font-bold">Puskesmas</span>';
+
+                    const lastUpdate = new Date(item.last_update).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+
+                    row.insertCell().innerHTML = typeLabel;
+                    row.insertCell().textContent = item.kabupaten;
+                    row.insertCell().textContent = item.kecamatan || '-';
+                    row.insertCell().textContent = item.puskesmas;
+                    const tdBotol = row.insertCell();
+                    tdBotol.className = 'px-6 py-4 text-center font-bold text-indigo-600';
+                    tdBotol.textContent = item.total_botol.toLocaleString();
+                    row.insertCell().textContent = lastUpdate;
+                });
+            } catch (err) {
+                console.error("Tracing error:", err);
+            }
+        }
+
+        function filterTracingTable() {
+            const input = document.getElementById("tracingSearch");
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById("tracingTable");
+            const tr = table.getElementsByTagName("tr");
+
+            for (let i = 1; i < tr.length; i++) {
+                let found = false;
+                const tds = tr[i].getElementsByTagName("td");
+                for (let j = 0; j < tds.length; j++) {
+                    if (tds[j] && tds[j].textContent.toLowerCase().indexOf(filter) > -1) {
+                        found = true;
+                        break;
+                    }
+                }
+                tr[i].style.display = found ? "" : "none";
+            }
         }
 
         // Init
