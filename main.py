@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-import sqlite3
+import psycopg2
 import requests
 import json
 import os
@@ -27,12 +27,15 @@ SATUSEHAT_CLIENT_SECRET = _env.get("SATUSEHAT_CLIENT_SECRET", "").strip()
 USE_SANDBOX             = _env.get("USE_SANDBOX", "true").lower() == "true"
 DATABASE_URL            = _env.get("DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip()
 
-USE_POSTGRES = bool(DATABASE_URL)
+DATABASE_URL            = _env.get("DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip()
 
-if USE_POSTGRES:
-    print(f"[DB] Using PostgreSQL (Neon): {DATABASE_URL[:40]}...")
-else:
-    print("[DB] Using SQLite (local development)")
+if not DATABASE_URL:
+    print("❌ CRITICAL ERROR: DATABASE_URL not found in .env or environment!")
+    print("   Application requires Neon PostgreSQL as the Single Source of Truth.")
+    import sys
+    sys.exit(1)
+
+print(f"[DB] Using Neon PostgreSQL (SSOT): {DATABASE_URL[:40]}...")
 
 SATUSEHAT_AUTH_URL = (
     "https://api-satusehat-stg.dto.kemkes.go.id/oauth2/v1/accesstoken?grant_type=client_credentials"
@@ -103,20 +106,8 @@ DB_FILE = "mms_data.db"  # Only used if USE_POSTGRES is False
 # DB CONNECTION UTILITIES
 # ============================
 def get_db_conn():
-    """Return an open DB connection — PostgreSQL or SQLite."""
-    if USE_POSTGRES:
-        import psycopg2
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-        return conn
-    else:
-        import sqlite3
-        return sqlite3.connect(DB_FILE)
-
-def mogrify(query: str) -> str:
-    """Convert SQLite-style ? placeholders to PostgreSQL %s style."""
-    if USE_POSTGRES:
-        return query.replace("?", "%s")
-    return query
+    """Return an open PostgreSQL connection."""
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 # ============================
 # SATUSEHAT TOKEN CACHE  
@@ -188,115 +179,83 @@ def fetch_puskesmas_from_satusehat(district_name: str, district_id: str) -> list
 
 
 def _seed_to_db(district_id: str, results: list):
-    """Cache SATUSEHAT results into local puskesmas_ref."""
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    for r in results:
-        if USE_POSTGRES:
-            cursor.execute(
-                "INSERT INTO puskesmas_ref (id, kode_kecamatan, nama, alamat) VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
-                (r["id"], district_id, r["name"], "")
-            )
-        else:
-            cursor.execute(
-                "INSERT OR REPLACE INTO puskesmas_ref (id, kode_kecamatan, nama, alamat) VALUES (?, ?, ?, ?)",
-                (r["id"], district_id, r["name"], "")
-            )
-    conn.commit()
-    conn.close()
+    """Cache SATUSEHAT results into puskesmas_ref."""
+    try:
+        with get_db_conn() as conn:
+            with conn.cursor() as cursor:
+                for r in results:
+                    cursor.execute(
+                        "INSERT INTO puskesmas_ref (id, kode_kecamatan, nama, alamat) VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                        (r["id"], district_id, r["name"], "")
+                    )
+            conn.commit()
+    except Exception as e:
+        print(f"[Seeding Error] {e}")
 
 
 # ============================
 # DATABASE INIT
 # ============================
 def init_db():
-    conn = get_db_conn()
-    cursor = conn.cursor()
-
-    if USE_POSTGRES:
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS mms_records (
-                id SERIAL PRIMARY KEY,
-                tipe_pelapor TEXT DEFAULT 'puskesmas',
-                reporter_name TEXT,
-                kabupaten TEXT,
-                kecamatan TEXT,
-                puskesmas TEXT,
-                created_at TIMESTAMPTZ DEFAULT now()
-            )
-        ''')
-        # Check if column exists, if not add it (PostgreSQL migration)
-        cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='mms_records' AND column_name='tipe_pelapor'")
-        if not cursor.fetchone():
-            cursor.execute("ALTER TABLE mms_records ADD COLUMN tipe_pelapor TEXT DEFAULT 'puskesmas'")
-            
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS mms_batches (
-                id SERIAL PRIMARY KEY,
-                submission_id INTEGER REFERENCES mms_records(id) ON DELETE CASCADE,
-                jumlah_botol INTEGER DEFAULT 0 CHECK (jumlah_botol >= 0),
-                jumlah_tab INTEGER DEFAULT 0,
-                tgl_kadaluarsa DATE
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS puskesmas_ref (
-                id TEXT PRIMARY KEY,
-                kode_kecamatan TEXT,
-                nama TEXT,
-                alamat TEXT
-            )
-        ''')
-        # Create indexes for performance
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mms_records_kab ON mms_records(kabupaten)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mms_batches_ed ON mms_batches(tgl_kadaluarsa)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mms_batches_sub ON mms_batches(submission_id)")
-    else:
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS mms_records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tipe_pelapor TEXT DEFAULT 'puskesmas',
-                reporter_name TEXT,
-                kabupaten TEXT,
-                kecamatan TEXT,
-                puskesmas TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        # Check if column exists, if not add it (SQLite migration)
-        cursor.execute("PRAGMA table_info(mms_records)")
-        cols = [c[1] for c in cursor.fetchall()]
-        if 'tipe_pelapor' not in cols:
-            cursor.execute("ALTER TABLE mms_records ADD COLUMN tipe_pelapor TEXT DEFAULT 'puskesmas'")
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS mms_batches (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                submission_id INTEGER,
-                jumlah_botol INTEGER,
-                jumlah_tab INTEGER,
-                tgl_kadaluarsa TEXT,
-                FOREIGN KEY (submission_id) REFERENCES mms_records(id)
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS puskesmas_ref (
-                id TEXT PRIMARY KEY,
-                kode_kecamatan TEXT,
-                nama TEXT,
-                alamat TEXT
-            )
-        ''')
-        # Seed bundled data only if table is empty
-        cursor.execute("SELECT COUNT(*) FROM puskesmas_ref")
-        if cursor.fetchone()[0] == 0:
-            cursor.executemany(
-                "INSERT OR IGNORE INTO puskesmas_ref (id, kode_kecamatan, nama, alamat) VALUES (?, ?, ?, ?)",
-                BUNDLED_PUSKESMAS
-            )
-
-    conn.commit()
-    conn.close()
+    """Initialize PostgreSQL schema for SSOT."""
+    try:
+        with get_db_conn() as conn:
+            with conn.cursor() as cursor:
+                # 1. Records Table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS mms_records (
+                        id SERIAL PRIMARY KEY,
+                        tipe_pelapor TEXT DEFAULT 'puskesmas',
+                        reporter_name TEXT,
+                        kabupaten TEXT,
+                        kecamatan TEXT,
+                        puskesmas TEXT,
+                        created_at TIMESTAMPTZ DEFAULT now()
+                    )
+                ''')
+                
+                # Column check (for migrations)
+                cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='mms_records' AND column_name='tipe_pelapor'")
+                if not cursor.fetchone():
+                    cursor.execute("ALTER TABLE mms_records ADD COLUMN tipe_pelapor TEXT DEFAULT 'puskesmas'")
+                    
+                # 2. Batches Table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS mms_batches (
+                        id SERIAL PRIMARY KEY,
+                        submission_id INTEGER REFERENCES mms_records(id) ON DELETE CASCADE,
+                        jumlah_botol INTEGER DEFAULT 0 CHECK (jumlah_botol >= 0),
+                        jumlah_tab INTEGER DEFAULT 0,
+                        tgl_kadaluarsa DATE
+                    )
+                ''')
+                
+                # 3. Reference Table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS puskesmas_ref (
+                        id TEXT PRIMARY KEY,
+                        kode_kecamatan TEXT,
+                        nama TEXT,
+                        alamat TEXT
+                    )
+                ''')
+                
+                # Indexes
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_mms_records_kab ON mms_records(kabupaten)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_mms_batches_ed ON mms_batches(tgl_kadaluarsa)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_mms_batches_sub ON mms_batches(submission_id)")
+                
+                # Seed bundled data if empty
+                cursor.execute("SELECT COUNT(*) FROM puskesmas_ref")
+                if cursor.fetchone()[0] == 0:
+                    for item in BUNDLED_PUSKESMAS:
+                        cursor.execute(
+                            "INSERT INTO puskesmas_ref (id, kode_kecamatan, nama, alamat) VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                            item
+                        )
+            conn.commit()
+    except Exception as e:
+        print(f"[DB Init Error] {e}")
 
 init_db()
 
@@ -341,13 +300,17 @@ async def get_districts(regency_id: str):
 
 @app.get("/api/puskesmas/{district_id}")
 async def get_puskesmas(district_id: str, name: Optional[str] = None):
-    with get_db_conn() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            mogrify("SELECT id, nama FROM puskesmas_ref WHERE kode_kecamatan = ? ORDER BY nama"),
-            (district_id,)
-        )
-        rows = cursor.fetchall()
+    try:
+        with get_db_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id, nama FROM puskesmas_ref WHERE kode_kecamatan = %s ORDER BY nama",
+                    (district_id,)
+                )
+                rows = cursor.fetchall()
+    except Exception as e:
+        print(f"[Puskesmas API Error] {e}")
+        rows = []
 
     if rows:
         return [{"id": r[0], "name": r[1]} for r in rows]
@@ -376,67 +339,115 @@ async def satusehat_status():
     return {"configured": configured, "sandbox": USE_SANDBOX}
 
 @app.get("/api/dashboard-summary")
-async def get_dashboard_summary():
+async def get_dashboard_summary(page: int = 1, page_size: int = 10, kabupaten: str = None):
     conn = get_db_conn()
     cursor = conn.cursor()
     
     # 1. Basic Stats
-    cursor.execute("SELECT COUNT(*) FROM mms_records")
+    where_clause = ""
+    params = []
+    if kabupaten and kabupaten != "Semua Kabupaten":
+        where_clause = " WHERE kabupaten = %s"
+        params = [kabupaten]
+        
+    cursor.execute(f"SELECT COUNT(*) FROM mms_records{where_clause}", tuple(params))
     total_submissions = cursor.fetchone()[0]
     
-    cursor.execute("SELECT COUNT(DISTINCT kabupaten) FROM mms_records")
+    total_pages = (total_submissions + page_size - 1) // page_size if total_submissions > 0 else 1
+    offset = (max(1, page) - 1) * page_size
+    
+    cursor.execute(f"SELECT COUNT(DISTINCT kabupaten) FROM mms_records{where_clause}", tuple(params))
     total_regencies = cursor.fetchone()[0]
     
-    # 2. Regency Aggregates (Charts)
-    cursor.execute("""
-        SELECT kabupaten, COUNT(*) as report_count 
+    # 2. Regency Stats (Count per Regency)
+    cursor.execute(f"""
+        SELECT kabupaten, COUNT(*) 
         FROM mms_records 
+        {where_clause}
         GROUP BY kabupaten 
-        ORDER BY report_count DESC
-    """)
+        ORDER BY COUNT(*) DESC
+    """, tuple(params))
     regency_stats = [{"kabupaten": r[0], "count": r[1]} for r in cursor.fetchall()]
-    
-    # 3. Logistics Aggregates (Stock per Regency)
-    cursor.execute("""
+
+    # 3. Logistics Stats (Sum botol per Regency)
+    cursor.execute(f"""
         SELECT r.kabupaten, SUM(b.jumlah_botol), SUM(b.jumlah_tab)
         FROM mms_records r
         JOIN mms_batches b ON r.id = b.submission_id
+        {where_clause}
         GROUP BY r.kabupaten
-    """)
+    """, tuple(params))
     logistics_stats = [
-        {"kabupaten": r[0], "total_botol": r[1] or 0, "total_tab": r[2] or 0} 
+        {"kabupaten": r[0], "total_botol": r[1] or 0, "total_tab": r[2] or 0}
         for r in cursor.fetchall()
     ]
-    
+
     # 4. Expiry Alerts (Next 6 months)
-    six_months_later = time.strftime("%Y-%m-%d", time.localtime(time.time() + 180*24*3600))
+    # We combine where_clause with date filter
+    expiry_where = " WHERE b.tgl_kadaluarsa <= %s"
+    expiry_params = [time.strftime("%Y-%m-%d", time.localtime(time.time() + 180*24*3600))]
+    if kabupaten and kabupaten != "Semua Kabupaten":
+        expiry_where += " AND r.kabupaten = %s"
+        expiry_params.append(kabupaten)
+
     cursor.execute(
-        mogrify("""
+        f"""
             SELECT r.puskesmas, r.kabupaten, b.jumlah_botol, b.tgl_kadaluarsa
             FROM mms_records r
             JOIN mms_batches b ON r.id = b.submission_id
-            WHERE b.tgl_kadaluarsa <= ?
+            {expiry_where}
             ORDER BY b.tgl_kadaluarsa ASC
-        """),
-        (six_months_later,)
+        """,
+        tuple(expiry_params)
     )
     expiry_alerts = [
         {"puskesmas": r[0], "kabupaten": r[1], "jumlah_botol": r[2], "ed": str(r[3])}
         for r in cursor.fetchall()
     ]
 
-    # 5. Recent submissions
-    cursor.execute("""
-        SELECT id, reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor 
-        FROM mms_records 
-        ORDER BY created_at DESC 
-        LIMIT 50
-    """)
+    # 6. Expiry Aggregates (Cards)
+    now_str = time.strftime("%Y-%m-%d")
+    six_m_str = time.strftime("%Y-%m-%d", time.localtime(time.time() + 180*24*3600))
+    twelve_m_str = time.strftime("%Y-%m-%d", time.localtime(time.time() + 365*24*3600))
+    
+    agg_where = ""
+    agg_params = []
+    if kabupaten and kabupaten != "Semua Kabupaten":
+        agg_where = " JOIN mms_records r ON r.id = b.submission_id WHERE r.kabupaten = %s"
+        agg_params = [kabupaten]
+
+    # Critical
+    crit_where = agg_where + (" AND " if agg_where else " WHERE ") + "b.tgl_kadaluarsa <= %s"
+    cursor.execute(f"SELECT SUM(b.jumlah_botol) FROM mms_batches b {crit_where}", tuple(agg_params + [six_m_str]))
+    stock_critical = cursor.fetchone()[0] or 0
+    
+    # Warning
+    warn_where = agg_where + (" AND " if agg_where else " WHERE ") + "b.tgl_kadaluarsa > %s AND b.tgl_kadaluarsa <= %s"
+    cursor.execute(f"SELECT SUM(b.jumlah_botol) FROM mms_batches b {warn_where}", tuple(agg_params + [six_m_str, twelve_m_str]))
+    stock_warning = cursor.fetchone()[0] or 0
+    
+    # Safe
+    safe_where = agg_where + (" AND " if agg_where else " WHERE ") + "b.tgl_kadaluarsa > %s"
+    cursor.execute(f"SELECT SUM(b.jumlah_botol) FROM mms_batches b {safe_where}", tuple(agg_params + [twelve_m_str]))
+    stock_safe = cursor.fetchone()[0] or 0
+
+    # 5. Recent submissions (Paginated)
+    sub_params = list(params) + [page_size, offset]
+    cursor.execute(
+        f"""
+            SELECT id, reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor 
+            FROM mms_records 
+            {where_clause}
+            ORDER BY created_at DESC 
+            LIMIT %s OFFSET %s
+        """,
+        tuple(sub_params)
+    )
     submissions = [
         {
             "id": r[0], "reporter_name": r[1], "kabupaten": r[2], 
             "kecamatan": r[3], "puskesmas": r[4], "created_at": str(r[5]),
-            "tipe_pelapor": r[6] if len(r) > 6 else 'puskesmas'
+            "tipe_pelapor": r[6]
         }
         for r in cursor.fetchall()
     ]
@@ -448,7 +459,18 @@ async def get_dashboard_summary():
         "regency_stats": regency_stats,
         "logistics_stats": logistics_stats,
         "expiry_alerts": expiry_alerts,
-        "submissions": submissions
+        "expiry_summary": {
+            "critical": stock_critical,
+            "warning": stock_warning,
+            "safe": stock_safe
+        },
+        "submissions": submissions,
+        "pagination": {
+            "total_records": total_submissions,
+            "total_pages": total_pages,
+            "current_page": page,
+            "page_size": page_size
+        }
     }
 
 @app.get("/api/export-excel")
@@ -459,26 +481,27 @@ async def export_excel():
     
     try:
         with get_db_conn() as conn:
-            query = """
-                SELECT 
-                    r.id as id_laporan,
-                    r.tipe_pelapor,
-                    r.reporter_name,
-                    r.kabupaten,
-                    r.kecamatan,
-                    r.puskesmas,
-                    r.created_at,
-                    b.jumlah_botol,
-                    b.jumlah_tab,
-                    b.tgl_kadaluarsa
-                FROM mms_records r
-                LEFT JOIN mms_batches b ON r.id = b.submission_id
-                ORDER BY r.created_at DESC
-            """
-            if USE_POSTGRES:
-                df = pd.read_sql_query(query, conn)
-            else:
-                df = pd.read_sql_query(query, conn)
+            with conn.cursor() as cursor:
+                query = """
+                    SELECT 
+                        r.id as id_laporan,
+                        r.tipe_pelapor,
+                        r.reporter_name,
+                        r.kabupaten,
+                        r.kecamatan,
+                        r.puskesmas,
+                        r.created_at,
+                        b.jumlah_botol,
+                        b.jumlah_tab,
+                        b.tgl_kadaluarsa
+                    FROM mms_records r
+                    LEFT JOIN mms_batches b ON r.id = b.submission_id
+                    ORDER BY r.created_at DESC
+                """
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                cols = [desc[0] for desc in cursor.description]
+                df = pd.DataFrame(rows, columns=cols)
         
         # Format dates for Excel
         if not df.empty:
@@ -492,10 +515,12 @@ async def export_excel():
         output.seek(0)
         
         headers = {
-            'Content-Disposition': 'attachment; filename="backup_mms_data.xlsx"'
+            'Content-Disposition': 'attachment; filename="backup_mms_data.xlsx"',
+            'Cache-Control': 'no-cache'
         }
-        return StreamingResponse(
-            output, 
+        from fastapi.responses import Response
+        return Response(
+            content=output.getvalue(), 
             headers=headers, 
             media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
@@ -545,25 +570,18 @@ async def submit_form(
 
     try:
         with get_db_conn() as conn:
-            cursor = conn.cursor()
-            if USE_POSTGRES:
+            with conn.cursor() as cursor:
                 cursor.execute(
                     "INSERT INTO mms_records (tipe_pelapor, reporter_name, kabupaten, kecamatan, puskesmas) VALUES (%s, %s, %s, %s, %s) RETURNING id",
                     (tipe_pelapor, reporter_name, kabupaten, kecamatan, puskesmas)
                 )
                 submission_id = cursor.fetchone()[0]
-            else:
-                cursor.execute(
-                    "INSERT INTO mms_records (tipe_pelapor, reporter_name, kabupaten, kecamatan, puskesmas) VALUES (?, ?, ?, ?, ?)",
-                    (tipe_pelapor, reporter_name, kabupaten, kecamatan, puskesmas)
-                )
-                submission_id = cursor.lastrowid
 
-            for batch in batches:
-                cursor.execute(
-                    mogrify("INSERT INTO mms_batches (submission_id, jumlah_botol, jumlah_tab, tgl_kadaluarsa) VALUES (?, ?, ?, ?)"),
-                    (submission_id, int(batch.get('jumlah_botol', 0)), int(batch.get('jumlah_tab', 0)), batch.get('tgl_kadaluarsa'))
-                )
+                for batch in batches:
+                    cursor.execute(
+                        "INSERT INTO mms_batches (submission_id, jumlah_botol, jumlah_tab, tgl_kadaluarsa) VALUES (%s, %s, %s, %s)",
+                        (submission_id, int(batch.get('jumlah_botol', 0)), int(batch.get('jumlah_tab', 0)), batch.get('tgl_kadaluarsa'))
+                    )
             conn.commit()
         return {"status": "success", "message": "Data & Batch berhasil disimpan!"}
     except Exception as e:

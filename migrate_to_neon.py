@@ -62,6 +62,7 @@ pg_cur.execute('''
         kabupaten TEXT,
         kecamatan TEXT,
         puskesmas TEXT,
+        tipe_pelapor TEXT DEFAULT 'puskesmas',
         created_at TIMESTAMPTZ DEFAULT now()
     )
 ''')
@@ -83,16 +84,16 @@ print("✅ Tabel siap.\n")
 # ================================
 # MIGRATE mms_records
 # ================================
-sq_cur.execute("SELECT id, reporter_name, kabupaten, kecamatan, puskesmas, created_at FROM mms_records ORDER BY id")
+sq_cur.execute("SELECT id, reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor FROM mms_records ORDER BY id")
 records = sq_cur.fetchall()
 print(f"📦 Memigrasikan {len(records)} baris dari mms_records...")
 
 id_map = {}  # old SQLite id → new PostgreSQL id
 for row in records:
-    old_id, reporter_name, kabupaten, kecamatan, puskesmas, created_at = row
+    old_id, reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor = row
     pg_cur.execute(
-        "INSERT INTO mms_records (reporter_name, kabupaten, kecamatan, puskesmas, created_at) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-        (reporter_name, kabupaten, kecamatan, puskesmas, created_at)
+        "INSERT INTO mms_records (reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+        (reporter_name, kabupaten, kecamatan, puskesmas, created_at, tipe_pelapor)
     )
     new_id = pg_cur.fetchone()[0]
     id_map[old_id] = new_id
